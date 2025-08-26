@@ -366,86 +366,154 @@ require_once __DIR__ . '/../pages/footer.php';
         </thead>
         <hr class="my-3">
         <tbody>
-        <?php
-        require_once __DIR__ . '/../db/config.php';
+       <?php
+require_once __DIR__ . '/../db/config.php';
 
-        try {
-            // Consulta SQL para obtener los detalles de atención con nombres de usuario y personal
-            $query_detalles = "SELECT 
-                                    DA.ID_Detalle, 
-                                    DA.ID_Usuario, 
-                                    U.Nombre AS NombreUsuario, 
-                                    U.ApellidoPaterno AS ApellidoPaternoUsuario, 
-                                    U.ApellidoMaterno AS ApellidoMaternoUsuario, 
-                                    DA.ID_Personal, 
-                                    P.Nombre AS NombrePersonal, 
-                                    P.ApellidoPaterno AS ApellidoPaternoPersonal, 
-                                    P.ApellidoMaterno AS ApellidoMaternoPersonal, 
-                                    DA.FechaRegistro, 
-                                    DA.TipoAtencion, 
-                                    DA.TipoAtencion, 
-                                    DA.PorcentajeAvance, 
-                                    DA.EstadoCaso, 
-                                    DA.EstadoCita, 
-                                    DA.Descripcion 
-                                FROM Detalles_Atencion DA 
-                                INNER JOIN Usuario U ON DA.ID_Usuario = U.id 
-                                INNER JOIN Personal P ON DA.ID_Personal = P.ID_Personal";
+try {
+    $registrosPorPagina = 20;
+    $pagina = isset($_GET['pagina']) && is_numeric($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
+    $offset = ($pagina - 1) * $registrosPorPagina;
 
-            // Verificar si se envió una consulta de búsqueda
-            if (isset($_GET['search']) && !empty($_GET['search'])) {
-                $search = $_GET['search'];
-                $query_detalles .= " WHERE 
-                            CONCAT(U.Nombre, ' ', U.ApellidoPaterno, ' ', U.ApellidoMaterno, ' ', 
-                            P.Nombre, ' ', P.ApellidoPaterno, ' ', P.ApellidoMaterno, ' ', 
-                            DA.Modalidad, ' ', DA.EstadoCita, ' ',
-                            DA.PorcentajeAvance, ' ', DA.EstadoCaso, ' ', DA.Descripcion) LIKE '%$search%'";
-            }
+    // Consulta base
+    $query_detalles = "SELECT 
+                            DA.ID_Detalle, 
+                            DA.ID_Usuario, 
+                            U.Nombre AS NombreUsuario, 
+                            U.ApellidoPaterno AS ApellidoPaternoUsuario, 
+                            U.ApellidoMaterno AS ApellidoMaternoUsuario, 
+                            DA.ID_Personal, 
+                            P.Nombre AS NombrePersonal, 
+                            P.ApellidoPaterno AS ApellidoPaternoPersonal, 
+                            P.ApellidoMaterno AS ApellidoMaternoPersonal, 
+                            DA.FechaRegistro, 
+                            DA.TipoAtencion, 
+                            DA.PorcentajeAvance, 
+                            DA.EstadoCaso, 
+                            DA.EstadoCita, 
+                            DA.Descripcion 
+                        FROM Detalles_Atencion DA 
+                        INNER JOIN Usuario U ON DA.ID_Usuario = U.id 
+                        INNER JOIN Personal P ON DA.ID_Personal = P.ID_Personal";
 
-            if (isset($_GET['start_date']) && isset($_GET['end_date']) && !empty($_GET['start_date']) && !empty($_GET['end_date'])) {
-              $start_date = $_GET['start_date'];
-              $end_date = $_GET['end_date'];
-              $query_detalles .= " WHERE DA.FechaRegistro BETWEEN '$start_date' AND '$end_date'";
-          } elseif (isset($_GET['month']) && !empty($_GET['month'])) {
-              $month = $_GET['month'];
-              $query_detalles .= " WHERE MONTH(DA.FechaRegistro) = $month";
-          } elseif (isset($_GET['year']) && !empty($_GET['year'])) {
-              $year = $_GET['year'];
-              $query_detalles .= " WHERE YEAR(DA.FechaRegistro) = $year";
-          }
-          
+    $countQuery = "SELECT COUNT(*) FROM Detalles_Atencion DA 
+                    INNER JOIN Usuario U ON DA.ID_Usuario = U.id 
+                    INNER JOIN Personal P ON DA.ID_Personal = P.ID_Personal";
 
+    $condiciones = [];
+    $params = [];
 
-            // Preparar y ejecutar la consulta SQL
-            $stmt_detalles = $conn->prepare($query_detalles);
-            $stmt_detalles->execute(); 
+    // Búsqueda
+    if (isset($_GET['search']) && !empty($_GET['search'])) {
+        $condiciones[] = "CONCAT(U.Nombre, ' ', U.ApellidoPaterno, ' ', U.ApellidoMaterno, ' ', 
+                                P.Nombre, ' ', P.ApellidoPaterno, ' ', P.ApellidoMaterno, ' ', 
+                                DA.TipoAtencion, ' ', DA.EstadoCita, ' ', DA.PorcentajeAvance, ' ', DA.EstadoCaso, ' ', DA.Descripcion) LIKE :search";
+        $params[':search'] = "%{$_GET['search']}%";
+    }
 
-            // Obtener los resultados de la consulta de detalles de atención
-            $detalles_atencion = $stmt_detalles->fetchAll(PDO::FETCH_ASSOC);
+    // Filtros de fecha
+    if (isset($_GET['start_date'], $_GET['end_date']) && !empty($_GET['start_date']) && !empty($_GET['end_date'])) {
+        $condiciones[] = "DA.FechaRegistro BETWEEN :start_date AND :end_date";
+        $params[':start_date'] = $_GET['start_date'];
+        $params[':end_date'] = $_GET['end_date'];
+    } elseif (isset($_GET['month']) && !empty($_GET['month'])) {
+        $condiciones[] = "MONTH(DA.FechaRegistro) = :month";
+        $params[':month'] = $_GET['month'];
+    } elseif (isset($_GET['year']) && !empty($_GET['year'])) {
+        $condiciones[] = "YEAR(DA.FechaRegistro) = :year";
+        $params[':year'] = $_GET['year'];
+    }
 
-            foreach ($detalles_atencion as $detalle) { 
-                echo "<tr>";
-                echo "<td>{$detalle['ID_Detalle']}</td>";
-                echo "<td>{$detalle['NombreUsuario']} {$detalle['ApellidoPaternoUsuario']} {$detalle['ApellidoMaternoUsuario']}</td>";
-                echo "<td>{$detalle['NombrePersonal']} {$detalle['ApellidoPaternoPersonal']} {$detalle['ApellidoMaternoPersonal']}</td>";
-                echo "<td>{$detalle['TipoAtencion']}</td>";
-                echo "<td>{$detalle['PorcentajeAvance']}</td>";
-                echo "<td>{$detalle['EstadoCaso']}</td>";
-                echo "<td>{$detalle['EstadoCita']}</td>";
-                echo "<td>{$detalle['Descripcion']}</td>";
-                echo "<td>{$detalle['FechaRegistro']}</td>";
-                echo "<td>{$detalle['FechaRegistro']}</td>";
-                echo "<td>";
-                echo "<a><button class='btn btn-danger btn-sm eliminar-detalle' data-id='{$detalle['ID_Detalle']}'><i class='bi bi-trash3-fill'></i></button></a>";
-                echo "</td>";
-                echo "</tr>";
-            }
-            echo "</tbody></table>";
-            echo "</div>";
-        } catch(PDOException $e) {
-            echo "Error: " . $e->getMessage();
+    // Aplicar condiciones
+    if (count($condiciones) > 0) {
+        $where = " WHERE " . implode(" AND ", $condiciones);
+        $query_detalles .= $where;
+        $countQuery .= $where;
+    }
+
+    // Contar total de registros
+    $stmtCount = $conn->prepare($countQuery);
+    foreach ($params as $key => $value) {
+        $stmtCount->bindValue($key, $value);
+    }
+    $stmtCount->execute();
+    $totalRegistros = $stmtCount->fetchColumn();
+    $totalPaginas = ceil($totalRegistros / $registrosPorPagina);
+
+    // Consulta principal con LIMIT y OFFSET
+    $query_detalles .= " LIMIT :limit OFFSET :offset";
+    $stmt_detalles = $conn->prepare($query_detalles);
+
+    foreach ($params as $key => $value) {
+        $stmt_detalles->bindValue($key, $value);
+    }
+    $stmt_detalles->bindValue(':limit', $registrosPorPagina, PDO::PARAM_INT);
+    $stmt_detalles->bindValue(':offset', $offset, PDO::PARAM_INT);
+
+    $stmt_detalles->execute();
+    $detalles_atencion = $stmt_detalles->fetchAll(PDO::FETCH_ASSOC);
+
+    // Mostrar resultados
+    foreach ($detalles_atencion as $detalle) { 
+        echo "<tr>";
+        echo "<td>{$detalle['ID_Detalle']}</td>";
+        echo "<td>{$detalle['NombreUsuario']} {$detalle['ApellidoPaternoUsuario']} {$detalle['ApellidoMaternoUsuario']}</td>";
+        echo "<td>{$detalle['NombrePersonal']} {$detalle['ApellidoPaternoPersonal']} {$detalle['ApellidoMaternoPersonal']}</td>";
+        echo "<td>{$detalle['TipoAtencion']}</td>";
+        echo "<td>{$detalle['PorcentajeAvance']}</td>";
+        echo "<td>{$detalle['EstadoCaso']}</td>";
+        echo "<td>{$detalle['EstadoCita']}</td>";
+        echo "<td>{$detalle['Descripcion']}</td>";
+        echo "<td>{$detalle['FechaRegistro']}</td>";
+        echo "<td>";
+        echo "<button class='btn btn-danger btn-sm eliminar-detalle' data-id='{$detalle['ID_Detalle']}'><i class='bi bi-trash3-fill'></i></button>";
+        echo "</td>";
+        echo "</tr>";
+    }
+
+    // --- Paginación ---
+    $ventana = 10;
+    $inicio = max(1, $pagina - floor($ventana / 2));
+    $fin = min($totalPaginas, $inicio + $ventana - 1);
+    if ($fin - $inicio + 1 < $ventana) {
+        $inicio = max(1, $fin - $ventana + 1);
+    }
+
+    echo "<nav aria-label='Page navigation'>";
+    echo "<ul class='pagination justify-content-center mt-3'>";
+
+    // Botón Anterior
+    if ($pagina > 1) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina - 1) . "'>&larr; Anterior</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>&larr; Anterior</span></li>";
+    }
+
+    // Números de página
+    for ($i = $inicio; $i <= $fin; $i++) {
+        if ($i == $pagina) {
+            echo "<li class='page-item active'><span class='page-link'>$i</span></li>";
+        } else {
+            echo "<li class='page-item'><a class='page-link' href='?pagina=$i'>$i</a></li>";
         }
-        ?>
+    }
+
+    // Botón Siguiente
+    if ($pagina < $totalPaginas) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina + 1) . "'>Siguiente &rarr;</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>Siguiente &rarr;</span></li>";
+    }
+
+    echo "</ul>";
+    echo "</nav>";
+
+    $conn = null;
+
+} catch(PDOException $e) {
+    echo "Error: " . $e->getMessage();
+}
+?>
+
         </tbody>
     </table>
 </div>

@@ -347,42 +347,70 @@ require_once __DIR__ . '/../pages/footer.php';
             </tr>
         </thead>
         <tbody>
-        <?php
+       <?php
 require_once __DIR__ . '/../db/config.php';
+
 try {
-    // Inicializar la consulta SQL para obtener datos de usuarios y sus hijos
+    $registrosPorPagina = 50;
+    $pagina = isset($_GET['pagina']) && is_numeric($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
+    $offset = ($pagina - 1) * $registrosPorPagina;
+
+    // Consulta base
     $query = "SELECT u.id AS usuario_id, u.Nombre AS usuario_nombre, u.ApellidoPaterno AS usuario_apellido_paterno, u.ApellidoMaterno AS usuario_apellido_materno, u.TelCelular, u.TelFijo, u.TelConfianza, u.Email, u.EmailRespaldo,
               h.ID_Hijo, h.Nombre AS hijo_nombre, h.ApellidoPaterno AS hijo_apellido_paterno, h.ApellidoMaterno AS hijo_apellido_materno, h.FechaNacimiento, h.Sexo, h.Escolaridad, h.Condicion
-              FROM Usuario u INNER JOIN Hijos_Usuario h ON u.id = h.ID_Usuario";
+              FROM Usuario u
+              INNER JOIN Hijos_Usuario h ON u.id = h.ID_Usuario";
 
-    // Verificar si se envió una consulta de búsqueda
+    $countQuery = "SELECT COUNT(*) FROM Usuario u INNER JOIN Hijos_Usuario h ON u.id = h.ID_Usuario";
+
+    $condiciones = [];
+    $params = [];
+
+    // Búsqueda por nombre del usuario
     if (isset($_GET['search']) && !empty($_GET['search'])) {
-        $search = $_GET['search'];
-        $query .= " WHERE CONCAT(u.Nombre, ' ', u.ApellidoPaterno, ' ', u.ApellidoMaterno) LIKE '%$search%'";
+        $condiciones[] = "CONCAT(u.Nombre, ' ', u.ApellidoPaterno, ' ', u.ApellidoMaterno) LIKE :search";
+        $params[':search'] = "%{$_GET['search']}%";
     }
 
-    // Preparar y ejecutar la consulta SQL
+    // Aplicar condiciones
+    if (count($condiciones) > 0) {
+        $where = " WHERE " . implode(" AND ", $condiciones);
+        $query .= $where;
+        $countQuery .= $where;
+    }
+
+    // Contar total de registros
+    $stmtCount = $conn->prepare($countQuery);
+    foreach ($params as $key => $value) {
+        $stmtCount->bindValue($key, $value);
+    }
+    $stmtCount->execute();
+    $totalRegistros = $stmtCount->fetchColumn();
+    $totalPaginas = ceil($totalRegistros / $registrosPorPagina);
+
+    // Consulta principal con LIMIT y OFFSET
+    $query .= " LIMIT :limit OFFSET :offset";
     $stmt = $conn->prepare($query);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->bindValue(':limit', $registrosPorPagina, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
     $stmt->execute();
 
-    // Obtener los resultados de la consulta
     $resultados = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Variable para rastrear si se encontraron resultados
     $resultadosEncontrados = false;
 
-    // Mostrar los usuarios y sus hijos en la tabla
+    // Mostrar resultados
     foreach ($resultados as $fila) {
-        $resultadosEncontrados = true; // Marcar que se encontraron resultados
+        $resultadosEncontrados = true;
         echo "<tr>";
         echo "<td>{$fila['usuario_id']}</td>";
         echo "<td>{$fila['usuario_nombre']} {$fila['usuario_apellido_paterno']} {$fila['usuario_apellido_materno']}</td>";
-        
-        
-        // Si hay información de hijo, mostrarla en una celda de la tabla
+
         if ($fila['ID_Hijo']) {
             echo "<td>{$fila['hijo_nombre']} {$fila['hijo_apellido_paterno']} {$fila['hijo_apellido_materno']}</td>";
-            // Calcular la edad a partir de la fecha de nacimiento
             $fechaNacimiento = new DateTime($fila['FechaNacimiento']);
             $hoy = new DateTime();
             $edad = $hoy->diff($fechaNacimiento)->y;
@@ -391,31 +419,63 @@ try {
             echo "<td>{$fila['Escolaridad']}</td>";
             echo "<td>{$fila['Condicion']}</td>";
         } else {
-            // Si no hay información de hijo, imprimir celdas vacías
-            echo "<td></td>";
-            echo "<td></td>";
-            echo "<td></td>";
-            echo "<td></td>";
-            echo "<td></td>";
+            echo "<td></td><td></td><td></td><td></td><td></td>";
         }
-        
+
         echo "<td>";
-        // Botón para editar usuario
-        // echo "<a href='../checkout/editar_usuaria.php?id={$usuario['id']}' class='btn btn-primary btn-sm'>Editar</a>"; 
-        // // Botón para eliminar usuario
-        // echo "<a><button class='btn btn-danger btn-sm eliminar-usuario' data-id='{$fila['usuario_id']}'>Eliminar</button></a>";
+        // Aquí puedes agregar botones si quieres
         echo "</td>";
         echo "</tr>";
     }
 
-    // Si no se encontraron resultados, mostrar un mensaje
     if (!$resultadosEncontrados) {
         echo "<tr><td colspan='8'>No se encontraron resultados.</td></tr>";
     }
+
+    // --- Paginación ---
+    $ventana = 10;
+    $inicio = max(1, $pagina - floor($ventana / 2));
+    $fin = min($totalPaginas, $inicio + $ventana - 1);
+    if ($fin - $inicio + 1 < $ventana) {
+        $inicio = max(1, $fin - $ventana + 1);
+    }
+
+    echo "<nav aria-label='Page navigation'>";
+    echo "<ul class='pagination justify-content-center mt-3'>";
+
+    // Botón Anterior
+    if ($pagina > 1) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina - 1) . "'>&larr; Anterior</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>&larr; Anterior</span></li>";
+    }
+
+    // Números de página
+    for ($i = $inicio; $i <= $fin; $i++) {
+        if ($i == $pagina) {
+            echo "<li class='page-item active'><span class='page-link'>$i</span></li>";
+        } else {
+            echo "<li class='page-item'><a class='page-link' href='?pagina=$i'>$i</a></li>";
+        }
+    }
+
+    // Botón Siguiente
+    if ($pagina < $totalPaginas) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina + 1) . "'>Siguiente &rarr;</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>Siguiente &rarr;</span></li>";
+    }
+
+    echo "</ul>";
+    echo "</nav>";
+
+    $conn = null;
+
 } catch(PDOException $e) {
     echo "Error: " . $e->getMessage();
 }
 ?>
+
 
 
 

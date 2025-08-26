@@ -393,75 +393,143 @@ require_once __DIR__ . '/../pages/footer.php';
             </tr>
         </thead>
         <tbody>
-            <?php
-            require_once __DIR__ . '/../db/config.php';
+           <?php
+require_once __DIR__ . '/../db/config.php';
 
-            try {
-                // Inicializar la consulta SQL
-                $query = "SELECT * FROM Usuario";
+try {
+    $registrosPorPagina = 8;
+    $pagina = isset($_GET['pagina']) && is_numeric($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
+    $offset = ($pagina - 1) * $registrosPorPagina;
 
-                // Verificar si se envió una consulta de búsqueda
-                if (isset($_GET['search']) && !empty($_GET['search'])) {
-                    $search = $_GET['search'];
-                    $query .= " WHERE CONCAT(Nombre, ' ', ApellidoPaterno, ' ', ApellidoMaterno, ' ', Sexo, ' ', LenguaMaterna, ' ', LenguaIndigena, ' ', OrientacionSexual) LIKE '%$search%'";
-                }
+    // Consulta base
+    $query = "SELECT * FROM Usuario";
+    $countQuery = "SELECT COUNT(*) FROM Usuario";
 
-                if (isset($_GET['start_date']) && isset($_GET['end_date']) && !empty($_GET['start_date']) && !empty($_GET['end_date'])) {
-                  $start_date = $_GET['start_date'];
-                  $end_date = $_GET['end_date'];
-                  $query .= " WHERE FechaRegistro BETWEEN '$start_date' AND '$end_date'";
-              } elseif (isset($_GET['month']) && !empty($_GET['month'])) {
-                  $month = $_GET['month'];
-                  $query .= " WHERE MONTH(FechaRegistro) = $month";
-              } elseif (isset($_GET['year']) && !empty($_GET['year'])) {
-                  $year = $_GET['year'];
-                  $query .= " WHERE YEAR(FechaRegistro) = $year";
-              }
+    // Arreglo de condiciones
+    $condiciones = [];
+    $params = [];
 
-                // Preparar y ejecutar la consulta SQL
-                $stmt = $conn->prepare($query);
-                $stmt->execute(); 
+    // Búsqueda por texto
+    if (isset($_GET['search']) && !empty($_GET['search'])) {
+        $condiciones[] = "CONCAT(Nombre, ' ', ApellidoPaterno, ' ', ApellidoMaterno, ' ', Sexo, ' ', LenguaMaterna, ' ', LenguaIndigena, ' ', OrientacionSexual) LIKE :search";
+        $params[':search'] = "%{$_GET['search']}%";
+    }
 
-                // Obtener los resultados de la consulta
-                $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Rango de fechas
+    if (isset($_GET['start_date'], $_GET['end_date']) && !empty($_GET['start_date']) && !empty($_GET['end_date'])) {
+        $condiciones[] = "FechaRegistro BETWEEN :start_date AND :end_date";
+        $params[':start_date'] = $_GET['start_date'];
+        $params[':end_date'] = $_GET['end_date'];
+    }
 
-                // Mostrar los usuarios en la tabla
-                foreach ($usuarios as $usuario) {
-                    echo "<tr>";
-                    echo "<td>{$usuario['id']}</td>";
-                    echo "<td>{$usuario['Nombre']} {$usuario['ApellidoPaterno']} {$usuario['ApellidoMaterno']}</td>";
-                    echo "<td>{$usuario['FechaNacimiento']}</td>";
-                    echo "<td>{$usuario['Edad']} años</td>";
-                    echo "<td>{$usuario['Sexo']}</td>"; 
-                    echo "<td>{$usuario['OrientacionSexual']}</td>";
-                    echo "<td>{$usuario['Estadocivil']}</td>";
-                    echo "<td>{$usuario['LugarNacimiento']}</td>";
-                    echo "<td>{$usuario['LenguaMaterna']}</td>";
-                    echo "<td>{$usuario['LenguaIndigena']}</td>";
-                    echo "<td>{$usuario['FechaRegistro']}</td>";
-                    echo "<td>";
-                    // Botón para editar
-                    echo "<a href='../checkout/editar_usuaria.php?id={$usuario['id']}' class='btn btn-primary btn-sm'><i class='bi bi-pencil-square'></i></a>"; 
-                    // Botón para eliminar
-                   // Agregar un botón de eliminación con un atributo data-id para almacenar el ID del usuario
-                    echo "<a><button class='btn btn-danger btn-sm eliminar-usuario' data-id='{$usuario['id']}'><i class='bi bi-trash3-fill'></i></button></a>";
-                    // Botón para registrar cita
-                    echo "<div></div>";
-                    echo "<button class='btn btn-success btn-sm registrar-cita' data-id='{$usuario['id']}' data-nombre='{$usuario['Nombre']} {$usuario['ApellidoPaterno']} {$usuario['ApellidoMaterno']}'>Registrar Cita</button>";
-                    // Botón para registrar Atencion 
-                    echo "<button class='btn btn-warning btn-sm registrar-atencion' data-id='{$usuario['id']}' data-nombre='{$usuario['Nombre']} {$usuario['ApellidoPaterno']} {$usuario['ApellidoMaterno']}'>Registrar Atencion</button>";
-                    // Botón para registrar en proyecto
-                    echo "<button class='btn btn-secondary btn-sm registrar-proyecto' data-id='{$usuario['id']}' data-nombre='{$usuario['Nombre']} {$usuario['ApellidoPaterno']} {$usuario['ApellidoMaterno']}'>Asignar proyecto</button>";
-                    
-                    echo "</td>";
-                    echo "</tr>";
-                }
-                // Cerrar la conexión a la base de datos
-                $conn = null;
-            } catch(PDOException $e) {
-                echo "Error: " . $e->getMessage();
-            }
-            ?>
+    // Filtrado por mes
+    if (isset($_GET['month']) && !empty($_GET['month'])) {
+        $condiciones[] = "MONTH(FechaRegistro) = :month";
+        $params[':month'] = $_GET['month'];
+    }
+
+    // Filtrado por año
+    if (isset($_GET['year']) && !empty($_GET['year'])) {
+        $condiciones[] = "YEAR(FechaRegistro) = :year";
+        $params[':year'] = $_GET['year'];
+    }
+
+    // Unir condiciones
+    if (count($condiciones) > 0) {
+        $where = " WHERE " . implode(" AND ", $condiciones);
+        $query .= $where;
+        $countQuery .= $where;
+    }
+
+    // Contar total de registros
+    $stmtCount = $conn->prepare($countQuery);
+    foreach ($params as $key => $value) {
+        $stmtCount->bindValue($key, $value);
+    }
+    $stmtCount->execute();
+    $totalRegistros = $stmtCount->fetchColumn();
+    $totalPaginas = ceil($totalRegistros / $registrosPorPagina);
+
+    // Consulta principal con LIMIT y OFFSET
+    $query .= " LIMIT :limit OFFSET :offset";
+    $stmt = $conn->prepare($query);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->bindValue(':limit', $registrosPorPagina, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Mostrar usuarios
+    foreach ($usuarios as $usuario) {
+        echo "<tr>";
+        echo "<td>{$usuario['id']}</td>";
+        echo "<td>{$usuario['Nombre']} {$usuario['ApellidoPaterno']} {$usuario['ApellidoMaterno']}</td>";
+        echo "<td>{$usuario['FechaNacimiento']}</td>";
+        echo "<td>{$usuario['Edad']} años</td>";
+        echo "<td>{$usuario['Sexo']}</td>";
+        echo "<td>{$usuario['OrientacionSexual']}</td>";
+        echo "<td>{$usuario['Estadocivil']}</td>";
+        echo "<td>{$usuario['LugarNacimiento']}</td>";
+        echo "<td>{$usuario['LenguaMaterna']}</td>";
+        echo "<td>{$usuario['LenguaIndigena']}</td>";
+        echo "<td>{$usuario['FechaRegistro']}</td>";
+        echo "<td>";
+        echo "<a href='../checkout/editar_usuaria.php?id={$usuario['id']}' class='btn btn-primary btn-sm'><i class='bi bi-pencil-square'></i></a> ";
+        echo "<button class='btn btn-danger btn-sm eliminar-usuario' data-id='{$usuario['id']}'><i class='bi bi-trash3-fill'></i></button> ";
+        echo "<button class='btn btn-success btn-sm registrar-cita' data-id='{$usuario['id']}' data-nombre='{$usuario['Nombre']} {$usuario['ApellidoPaterno']} {$usuario['ApellidoMaterno']}'>Registrar Cita</button> ";
+        echo "<button class='btn btn-warning btn-sm registrar-atencion' data-id='{$usuario['id']}' data-nombre='{$usuario['Nombre']} {$usuario['ApellidoPaterno']} {$usuario['ApellidoMaterno']}'>Registrar Atención</button> ";
+        echo "<button class='btn btn-secondary btn-sm registrar-proyecto' data-id='{$usuario['id']}' data-nombre='{$usuario['Nombre']} {$usuario['ApellidoPaterno']} {$usuario['ApellidoMaterno']}'>Asignar proyecto</button>";
+        echo "</td>";
+        echo "</tr>";
+    }
+
+    // --- Paginación estilo ventana de 10 páginas ---
+    $ventana = 10;
+    $inicio = max(1, $pagina - floor($ventana / 2));
+    $fin = min($totalPaginas, $inicio + $ventana - 1);
+    if ($fin - $inicio + 1 < $ventana) {
+        $inicio = max(1, $fin - $ventana + 1);
+    }
+
+    echo "<nav aria-label='Page navigation'>";
+    echo "<ul class='pagination justify-content-center mt-3'>";
+
+    // Botón Anterior
+    if ($pagina > 1) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina - 1) . "'>&larr; Anterior</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>&larr; Anterior</span></li>";
+    }
+
+    // Números de página
+    for ($i = $inicio; $i <= $fin; $i++) {
+        if ($i == $pagina) {
+            echo "<li class='page-item active'><span class='page-link'>$i</span></li>";
+        } else {
+            echo "<li class='page-item'><a class='page-link' href='?pagina=$i'>$i</a></li>";
+        }
+    }
+
+    // Botón Siguiente
+    if ($pagina < $totalPaginas) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina + 1) . "'>Siguiente &rarr;</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>Siguiente &rarr;</span></li>";
+    }
+
+    echo "</ul>";
+    echo "</nav>";
+
+    $conn = null;
+
+} catch(PDOException $e) {
+    echo "Error: " . $e->getMessage();
+}
+?>
+
         </tbody>
     </table>
 </div>

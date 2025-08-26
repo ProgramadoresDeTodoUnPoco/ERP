@@ -335,52 +335,118 @@ require_once __DIR__ . '/../pages/footer.php';
             </tr>
         </thead>
         <tbody>
-        <?php
+      <?php
 require_once __DIR__ . '/../db/config.php';
 
 try {
-    // Inicializar la consulta SQL
+    $registrosPorPagina = 10;
+    $pagina = isset($_GET['pagina']) && is_numeric($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
+    $offset = ($pagina - 1) * $registrosPorPagina;
+
     $query = "SELECT * FROM Personal";
+    $countQuery = "SELECT COUNT(*) FROM Personal";
 
-    // Verificar si se envió una consulta de búsqueda
+    $condiciones = [];
+    $params = [];
+
+    // Búsqueda
     if (isset($_GET['search']) && !empty($_GET['search'])) {
-      $search = $_GET['search'];
-      $query .= " WHERE CONCAT(Nombre, ' ', ApellidoPaterno, ' ', ApellidoMaterno) LIKE '%$search%'";
-  }
+        $condiciones[] = "CONCAT(Nombre, ' ', ApellidoPaterno, ' ', ApellidoMaterno) LIKE :search";
+        $params[':search'] = "%{$_GET['search']}%";
+    }
 
-    // Preparar y ejecutar la consulta SQL
+    if (count($condiciones) > 0) {
+        $where = " WHERE " . implode(" AND ", $condiciones);
+        $query .= $where;
+        $countQuery .= $where;
+    }
+
+    // Contar total de registros
+    $stmtCount = $conn->prepare($countQuery);
+    foreach ($params as $key => $value) {
+        $stmtCount->bindValue($key, $value);
+    }
+    $stmtCount->execute();
+    $totalRegistros = $stmtCount->fetchColumn();
+    $totalPaginas = ceil($totalRegistros / $registrosPorPagina);
+
+    // Consulta principal con LIMIT y OFFSET
+    $query .= " LIMIT :limit OFFSET :offset";
     $stmt = $conn->prepare($query);
-    $stmt->execute();
 
-    // Obtener los resultados de la consulta
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->bindValue(':limit', $registrosPorPagina, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+
+    $stmt->execute();
     $personales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Mostrar los datos en la tabla HTML
+    // Mostrar resultados
     foreach ($personales as $personal) {
         echo "<tr>";
         echo "<td>{$personal['ID_Personal']}</td>";
         echo "<td>{$personal['Nombre']} {$personal['ApellidoPaterno']} {$personal['ApellidoMaterno']}</td>";
-        // Calcular la edad a partir de la fecha de nacimiento
+
         $fechaNacimiento = new DateTime($personal['FechaNacimiento']);
         $hoy = new DateTime();
         $edad = $hoy->diff($fechaNacimiento)->y;
         echo "<td>{$edad} años</td>";
+
         echo "<td>{$personal['Sexo']}</td>";
         echo "<td>{$personal['Genero']}</td>";
         echo "<td>";
-        // Botón para editar
-        echo "<a href='../checkout/editar-personal.php?id={$personal['ID_Personal']}' class='btn btn-primary btn-sm'>Editar</a>";
-        // Botón para eliminar
-        echo "<button class='btn btn-danger btn-sm eliminar-personal' data-id='{$personal['ID_Personal']}'>Eliminar</button>";
+        echo "<a href='../checkout/editar-personal.php?id={$personal['ID_Personal']}' class='btn btn-primary btn-sm'><i class='bi bi-pencil-square'></i></a> ";
+        echo "<button class='btn btn-danger btn-sm eliminar-personal' data-id='{$personal['ID_Personal']}'><i class='bi bi-trash3-fill'></i></button>";
         echo "</td>";
         echo "</tr>";
     }
-    // Cerrar la conexión
+
+    // --- Paginación ---
+    $ventana = 10;
+    $inicio = max(1, $pagina - floor($ventana / 2));
+    $fin = min($totalPaginas, $inicio + $ventana - 1);
+    if ($fin - $inicio + 1 < $ventana) {
+        $inicio = max(1, $fin - $ventana + 1);
+    }
+
+    echo "<nav aria-label='Page navigation'>";
+    echo "<ul class='pagination justify-content-center mt-3'>";
+
+    // Botón Anterior
+    if ($pagina > 1) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina - 1) . "'>&larr; Anterior</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>&larr; Anterior</span></li>";
+    }
+
+    // Números de página
+    for ($i = $inicio; $i <= $fin; $i++) {
+        if ($i == $pagina) {
+            echo "<li class='page-item active'><span class='page-link'>$i</span></li>";
+        } else {
+            echo "<li class='page-item'><a class='page-link' href='?pagina=$i'>$i</a></li>";
+        }
+    }
+
+    // Botón Siguiente
+    if ($pagina < $totalPaginas) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina + 1) . "'>Siguiente &rarr;</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>Siguiente &rarr;</span></li>";
+    }
+
+    echo "</ul>";
+    echo "</nav>";
+
     $conn = null;
+
 } catch(PDOException $e) {
     echo "Error: " . $e->getMessage();
 }
 ?>
+
 
         </tbody>
     </table>

@@ -155,9 +155,9 @@
     </a>
   </li>
   <li class="nav-item">
-    <a class="nav-link d-flex align-items-center gap-2" href="../checkout/register-donativo.php">
+    <a class="nav-link d-flex align-items-center gap-2" href="../checkout/asignar-diplomado.php">
     <i class="bi bi-piggy-bank-fill"></i>
-      Asignar Actividad
+      Asignar Diplomado
     </a>
   </li>
   <li class="nav-item">

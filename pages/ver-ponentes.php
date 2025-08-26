@@ -358,7 +358,7 @@ require_once __DIR__ . '/../pages/footer.php';
             if ($conn->connect_error) {
                 die("<tr><td colspan='9'>Conexión fallida: " . htmlspecialchars($conn->connect_error) . "</td></tr>");
             }
-
+$conn->set_charset("utf8");
             $sql = "SELECT ID_Ponente, Nombre, ApellidoPaterno, ApellidoMaterno, Correo, Telefono, Especialidad, Biografia, Foto, RedesSociales FROM Ponentes";
 
             if (isset($_GET['search']) && !empty($_GET['search'])) {
@@ -370,7 +370,11 @@ require_once __DIR__ . '/../pages/footer.php';
 
             if ($result && $result->num_rows > 0):
                 while ($row = $result->fetch_assoc()):
+
+         
         ?>
+
+        
         <tr>
           <td><?= htmlspecialchars(isset($row['ID_Ponente']) ? $row['ID_Ponente'] : 'N/A') ?></td>
           <td>
@@ -379,11 +383,13 @@ require_once __DIR__ . '/../pages/footer.php';
             ?>
             <img src="../uploads/ponentes/<?= htmlspecialchars($foto) ?>" alt="Foto Ponente" class="foto-ponente">
           </td>
-          <td><?= htmlspecialchars(
-                (isset($row['Nombre']) ? $row['Nombre'] : '') . " " .
-                (isset($row['ApellidoPaterno']) ? $row['ApellidoPaterno'] : '') . " " .
-                (isset($row['ApellidoMaterno']) ? $row['ApellidoMaterno'] : '')
-              ) ?></td>
+          <?php
+        $nombre = 
+      (isset($row['Nombre']) ? $row['Nombre'] : '') . " " .
+      (isset($row['ApellidoPaterno']) ? $row['ApellidoPaterno'] : '') . " " .
+      (isset($row['ApellidoMaterno']) ? $row['ApellidoMaterno'] : '');
+          ?>
+          <td><?= htmlspecialchars(trim($nombre))?></td>
           <td><?= htmlspecialchars(isset($row['Correo']) ? $row['Correo'] : 'N/A') ?></td>
           <td><?= htmlspecialchars(isset($row['Telefono']) ? $row['Telefono'] : 'N/A') ?></td>
           <td><?= htmlspecialchars(isset($row['Especialidad']) ? $row['Especialidad'] : 'N/A') ?></td>

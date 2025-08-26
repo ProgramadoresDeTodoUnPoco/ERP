@@ -353,73 +353,138 @@ require_once __DIR__ . '/../pages/footer.php';
             </tr>
         </thead>
         <tbody>
-        <?php
-        require_once __DIR__ . '/../db/config.php';
+       <?php
+require_once __DIR__ . '/../db/config.php';
 
-        try {
-            // Inicializar la consulta SQL
-            $query = "SELECT * FROM Feminicidios";
+try {
+    $registrosPorPagina = 8;
+    $pagina = isset($_GET['pagina']) && is_numeric($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
+    $offset = ($pagina - 1) * $registrosPorPagina;
 
-            // Verificar si se envió una consulta de búsqueda
-            if (isset($_GET['search']) && !empty($_GET['search'])) {
-                $search = $_GET['search'];
-                $query .= " WHERE CONCAT(NombreVictima, ' ', ApellidoPaterno, ' ', ApellidoMaterno) LIKE '%$search%'";
-            }
+    // Consulta base
+    $query = "SELECT * FROM Feminicidios";
+    $countQuery = "SELECT COUNT(*) FROM Feminicidios";
 
-            // Preparar y ejecutar la consulta SQL
-            $stmt = $conn->prepare($query);
-            $stmt->execute();
+    $condiciones = [];
+    $params = [];
 
-            // Obtener los resultados de la consulta
-            $feminicidios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Búsqueda por nombre de víctima
+    if (isset($_GET['search']) && !empty($_GET['search'])) {
+        $condiciones[] = "CONCAT(NombreVictima, ' ', ApellidoPaterno, ' ', ApellidoMaterno) LIKE :search";
+        $params[':search'] = "%{$_GET['search']}%";
+    }
 
-            // Mostrar los datos en la tabla HTML
-            foreach ($feminicidios as $feminicidio) {
-                echo "<tr>";
-                echo "<td>{$feminicidio['FechaHecho']}</td>";
-                echo "<td>{$feminicidio['NombreVictima']} {$feminicidio['ApellidoPaterno']} {$feminicidio['ApellidoMaterno']}</td>";
-                echo "<td>{$feminicidio['LugarOrigen']}</td>";
-                echo "<td>{$feminicidio['Ocupacion']}</td>";
-                echo "<td>{$feminicidio['Calle']} {$feminicidio['Numero']}</td>";
-                echo "<td>{$feminicidio['Municipio']}</td>";
-                echo "<td>{$feminicidio['Region']}</td>";
-                echo "<td>{$feminicidio['Estado']}</td>";
-                echo "<td>{$feminicidio['ClaveMunicipio']}</td>";
-                echo "<td>{$feminicidio['AlertaGenero']}</td>";
-                echo "<td>{$feminicidio['IDCasoAnual']}</td>";
-                echo "<td>{$feminicidio['NumAveriguacion']}</td>";
-                echo "<td>{$feminicidio['SituacionJuridica']}</td>";
-                echo "<td>{$feminicidio['Desaparecida']}</td>";
-                echo "<td>{$feminicidio['FechaDesaparicion']}</td>";
-                echo "<td>{$feminicidio['LugarEncontradoCuerpo']}</td>";
-                echo "<td>{$feminicidio['DescripcionCuerpo']}</td>";
-                echo "<td>{$feminicidio['FormaMuerte']}</td>";
-                echo "<td>{$feminicidio['TipoArma']}</td>";
-                echo "<td>{$feminicidio['Causas']}</td>";
-                echo "<td>{$feminicidio['Descendencia']}</td>";
-                echo "<td>{$feminicidio['NumDescendencia']}</td>";
-                echo "<td>{$feminicidio['NombreAgresor']}</td>";
-                echo "<td>{$feminicidio['ParentescoAgresor']}</td>";
-                echo "<td>{$feminicidio['FuentePeriodistica']}</td>";
-                echo "<td>{$feminicidio['AutorNota']}</td>";
-                echo "<td>{$feminicidio['LinkNota']}</td>";
-                echo "<td>{$feminicidio['Latitud']}</td>";
-                echo "<td>{$feminicidio['Longitud']}</td>";
-                echo "<td>{$feminicidio['Sexenio']}</td>";
-                echo "<td>";
-                // Botón para editar
-                // echo "<a href='editar_feminicidio.php?id={$feminicidio['ID']}' class='btn btn-primary btn-sm'>Editar</a>";
-                // Botón para eliminar
-                echo "<button class='btn btn-danger btn-sm eliminar-feminicidio' data-id='{$feminicidio['ID']}'>Eliminar</button>";
-                echo "</td>";
-                echo "</tr>";
-            }
-            // Cerrar la conexión
-            $conn = null;
-        } catch(PDOException $e) {
-            echo "Error: " . $e->getMessage();
+    // Aplicar condiciones
+    if (count($condiciones) > 0) {
+        $where = " WHERE " . implode(" AND ", $condiciones);
+        $query .= $where;
+        $countQuery .= $where;
+    }
+
+    // Contar total de registros
+    $stmtCount = $conn->prepare($countQuery);
+    foreach ($params as $key => $value) {
+        $stmtCount->bindValue($key, $value);
+    }
+    $stmtCount->execute();
+    $totalRegistros = $stmtCount->fetchColumn();
+    $totalPaginas = ceil($totalRegistros / $registrosPorPagina);
+
+    // Consulta principal con LIMIT y OFFSET
+    $query .= " LIMIT :limit OFFSET :offset";
+    $stmt = $conn->prepare($query);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->bindValue(':limit', $registrosPorPagina, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $feminicidios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Mostrar resultados en tabla
+    foreach ($feminicidios as $feminicidio) {
+        echo "<tr>";
+        echo "<td>{$feminicidio['FechaHecho']}</td>";
+        echo "<td>{$feminicidio['NombreVictima']} {$feminicidio['ApellidoPaterno']} {$feminicidio['ApellidoMaterno']}</td>";
+        echo "<td>{$feminicidio['LugarOrigen']}</td>";
+        echo "<td>{$feminicidio['Ocupacion']}</td>";
+        echo "<td>{$feminicidio['Calle']} {$feminicidio['Numero']}</td>";
+        echo "<td>{$feminicidio['Municipio']}</td>";
+        echo "<td>{$feminicidio['Region']}</td>";
+        echo "<td>{$feminicidio['Estado']}</td>";
+        echo "<td>{$feminicidio['ClaveMunicipio']}</td>";
+        echo "<td>{$feminicidio['AlertaGenero']}</td>";
+        echo "<td>{$feminicidio['IDCasoAnual']}</td>";
+        echo "<td>{$feminicidio['NumAveriguacion']}</td>";
+        echo "<td>{$feminicidio['SituacionJuridica']}</td>";
+        echo "<td>{$feminicidio['Desaparecida']}</td>";
+        echo "<td>{$feminicidio['FechaDesaparicion']}</td>";
+        echo "<td>{$feminicidio['LugarEncontradoCuerpo']}</td>";
+        echo "<td>{$feminicidio['DescripcionCuerpo']}</td>";
+        echo "<td>{$feminicidio['FormaMuerte']}</td>";
+        echo "<td>{$feminicidio['TipoArma']}</td>";
+        echo "<td>{$feminicidio['Causas']}</td>";
+        echo "<td>{$feminicidio['Descendencia']}</td>";
+        echo "<td>{$feminicidio['NumDescendencia']}</td>";
+        echo "<td>{$feminicidio['NombreAgresor']}</td>";
+        echo "<td>{$feminicidio['ParentescoAgresor']}</td>";
+        echo "<td>{$feminicidio['FuentePeriodistica']}</td>";
+        echo "<td>{$feminicidio['AutorNota']}</td>";
+        echo "<td>{$feminicidio['LinkNota']}</td>";
+        echo "<td>{$feminicidio['Latitud']}</td>";
+        echo "<td>{$feminicidio['Longitud']}</td>";
+        echo "<td>{$feminicidio['Sexenio']}</td>";
+        echo "<td>";
+        echo "<button class='btn btn-danger btn-sm eliminar-feminicidio' data-id='{$feminicidio['ID']}'>Eliminar</button>";
+        echo "</td>";
+        echo "</tr>";
+    }
+
+    // --- Paginación ---
+    $ventana = 10;
+    $inicio = max(1, $pagina - floor($ventana / 2));
+    $fin = min($totalPaginas, $inicio + $ventana - 1);
+    if ($fin - $inicio + 1 < $ventana) {
+        $inicio = max(1, $fin - $ventana + 1);
+    }
+
+    echo "<nav aria-label='Page navigation'>";
+    echo "<ul class='pagination justify-content-center mt-3'>";
+
+    // Botón Anterior
+    if ($pagina > 1) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina - 1) . "'>&larr; Anterior</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>&larr; Anterior</span></li>";
+    }
+
+    // Números de página
+    for ($i = $inicio; $i <= $fin; $i++) {
+        if ($i == $pagina) {
+            echo "<li class='page-item active'><span class='page-link'>$i</span></li>";
+        } else {
+            echo "<li class='page-item'><a class='page-link' href='?pagina=$i'>$i</a></li>";
         }
-        ?>
+    }
+
+    // Botón Siguiente
+    if ($pagina < $totalPaginas) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina + 1) . "'>Siguiente &rarr;</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>Siguiente &rarr;</span></li>";
+    }
+
+    echo "</ul>";
+    echo "</nav>";
+
+    $conn = null;
+
+} catch(PDOException $e) {
+    echo "Error: " . $e->getMessage();
+}
+?>
+
         </tbody>
     </table>
 </div>

@@ -338,49 +338,112 @@ require_once __DIR__ . '/../pages/footer.php';
         </thead>
         <tbody>
             <?php
-            require_once __DIR__ . '/../db/config.php';
+require_once __DIR__ . '/../db/config.php';
 
-            try {
-                // Inicializar la consulta SQL
-                $query = "SELECT * FROM Usuario";
+try {
+    $registrosPorPagina = 25;
+    $pagina = isset($_GET['pagina']) && is_numeric($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
+    $offset = ($pagina - 1) * $registrosPorPagina;
 
-                // Verificar si se envió una consulta de búsqueda
-                if (isset($_GET['search']) && !empty($_GET['search'])) {
-                    $search = $_GET['search'];
-                    $query .= " WHERE CONCAT(Nombre, ' ', ApellidoPaterno, ' ', ApellidoMaterno) LIKE '%$search%'";
-                }
+    // Consulta base
+    $query = "SELECT * FROM Usuario";
+    $countQuery = "SELECT COUNT(*) FROM Usuario";
 
-                // Preparar y ejecutar la consulta SQL
-                $stmt = $conn->prepare($query);
-                $stmt->execute();
+    $condiciones = [];
+    $params = [];
 
-                // Obtener los resultados de la consulta
-                $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    // Búsqueda por texto
+    if (isset($_GET['search']) && !empty($_GET['search'])) {
+        $condiciones[] = "CONCAT(Nombre, ' ', ApellidoPaterno, ' ', ApellidoMaterno) LIKE :search";
+        $params[':search'] = "%{$_GET['search']}%";
+    }
 
-                // Mostrar los usuarios en la tabla
-                foreach ($usuarios as $usuario) {
-                    echo "<tr>";
-                    echo "<td>{$usuario['id']}</td>";
-                    echo "<td>{$usuario['Nombre']} {$usuario['ApellidoPaterno']} {$usuario['ApellidoMaterno']}</td>";
-                    echo "<td>{$usuario['CURP']}</td>";
-                    echo "<td>{$usuario['INE']}</td>";
-                    // echo "<td>{$usuario['RutaCURP']}</td>";
-                    // echo "<td>{$usuario['RutaINE']}</td>";
-                    // echo "<td>{$usuario['RutaComDomicilio']}</td>";
-                    echo "<td>";
-                    // Botón para editar
-                    echo "<a href='../checkout/editar_usuaria.php?id={$usuario['id']}' class='btn btn-primary btn-sm'>Editar</a>"; 
-                    // Botón para eliminar
-                   // Agregar un botón de eliminación con un atributo data-id para almacenar el ID del usuario
-                    echo "<a><button class='btn btn-danger btn-sm eliminar-usuario' data-id='{$usuario['id']}'>Eliminar</button></a>";
-                    
-                    echo "</td>";
-                    echo "</tr>";
-                }
-            } catch(PDOException $e) {
-                echo "Error: " . $e->getMessage();
-            }
-            ?>
+    // Aplicar condiciones si existen
+    if (count($condiciones) > 0) {
+        $where = " WHERE " . implode(" AND ", $condiciones);
+        $query .= $where;
+        $countQuery .= $where;
+    }
+
+    // Contar total de registros
+    $stmtCount = $conn->prepare($countQuery);
+    foreach ($params as $key => $value) {
+        $stmtCount->bindValue($key, $value);
+    }
+    $stmtCount->execute();
+    $totalRegistros = $stmtCount->fetchColumn();
+    $totalPaginas = ceil($totalRegistros / $registrosPorPagina);
+
+    // Consulta principal con LIMIT y OFFSET
+    $query .= " LIMIT :limit OFFSET :offset";
+    $stmt = $conn->prepare($query);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->bindValue(':limit', $registrosPorPagina, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Mostrar usuarios
+    foreach ($usuarios as $usuario) {
+        echo "<tr>";
+        echo "<td>{$usuario['id']}</td>";
+        echo "<td>{$usuario['Nombre']} {$usuario['ApellidoPaterno']} {$usuario['ApellidoMaterno']}</td>";
+        echo "<td>{$usuario['CURP']}</td>";
+        echo "<td>{$usuario['INE']}</td>";
+        echo "<td>";
+        echo "<a href='../checkout/editar_usuaria.php?id={$usuario['id']}' class='btn btn-primary btn-sm'>Editar</a> ";
+        echo "<button class='btn btn-danger btn-sm eliminar-usuario' data-id='{$usuario['id']}'>Eliminar</button>";
+        echo "</td>";
+        echo "</tr>";
+    }
+
+    // --- Paginación estilo ventana de 10 páginas ---
+    $ventana = 10;
+    $inicio = max(1, $pagina - floor($ventana / 2));
+    $fin = min($totalPaginas, $inicio + $ventana - 1);
+    if ($fin - $inicio + 1 < $ventana) {
+        $inicio = max(1, $fin - $ventana + 1);
+    }
+
+    echo "<nav aria-label='Page navigation'>";
+    echo "<ul class='pagination justify-content-center mt-3'>";
+
+    // Botón Anterior
+    if ($pagina > 1) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina - 1) . "'>&larr; Anterior</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>&larr; Anterior</span></li>";
+    }
+
+    // Números de página
+    for ($i = $inicio; $i <= $fin; $i++) {
+        if ($i == $pagina) {
+            echo "<li class='page-item active'><span class='page-link'>$i</span></li>";
+        } else {
+            echo "<li class='page-item'><a class='page-link' href='?pagina=$i'>$i</a></li>";
+        }
+    }
+
+    // Botón Siguiente
+    if ($pagina < $totalPaginas) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina + 1) . "'>Siguiente &rarr;</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>Siguiente &rarr;</span></li>";
+    }
+
+    echo "</ul>";
+    echo "</nav>";
+
+    $conn = null;
+
+} catch(PDOException $e) {
+    echo "Error: " . $e->getMessage();
+}
+?>
+
         </tbody>
     </table>
 </div>
