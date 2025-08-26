@@ -328,32 +328,113 @@ require_once __DIR__ . '/../pages/footer.php';
             </tr>
         </thead>
         <tbody>
-            <?php
-           require_once __DIR__ . '/../db/config.php';
+          <?php
+require_once __DIR__ . '/../db/config.php';
 
-            try {
-                // Inicializar la consulta SQL con JOIN
-                $query = "SELECT a.ID_Asignacion, CONCAT(u.Nombre, ' ', u.ApellidoPaterno, ' ', u.ApellidoMaterno) AS NombreCompleto, p.NombreProyecto FROM Asignaciones a INNER JOIN Usuario u ON a.ID_Usuario = u.id INNER JOIN Proyectos p ON a.ID_Proyecto = p.ID_Proyecto";
+try {
+    $registrosPorPagina = 10;
+    $pagina = isset($_GET['pagina']) && is_numeric($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
+    $offset = ($pagina - 1) * $registrosPorPagina;
 
-                // Preparar y ejecutar la consulta SQL
-                $stmt = $conn->prepare($query);
-                $stmt->execute();
+    $query = "SELECT a.ID_Asignacion, CONCAT(u.Nombre, ' ', u.ApellidoPaterno, ' ', u.ApellidoMaterno) AS NombreCompleto, p.NombreProyecto 
+              FROM Asignaciones a 
+              INNER JOIN Usuario u ON a.ID_Usuario = u.id 
+              INNER JOIN Proyectos p ON a.ID_Proyecto = p.ID_Proyecto";
+    
+    $countQuery = "SELECT COUNT(*) FROM Asignaciones a 
+                   INNER JOIN Usuario u ON a.ID_Usuario = u.id 
+                   INNER JOIN Proyectos p ON a.ID_Proyecto = p.ID_Proyecto";
 
-                // Obtener los resultados de la consulta
-                $asignaciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $condiciones = [];
+    $params = [];
 
-                // Mostrar los datos en la tabla HTML
-                foreach ($asignaciones as $asignacion) {
-                    echo "<tr>";
-                    echo "<td>{$asignacion['ID_Asignacion']}</td>";
-                    echo "<td>{$asignacion['NombreCompleto']}</td>";
-                    echo "<td>{$asignacion['NombreProyecto']}</td>";
-                    echo "</tr>";
-                }
-            } catch(PDOException $e) {
-                echo "Error: " . $e->getMessage();
-            }
-            ?>
+    // Búsqueda
+    if (isset($_GET['search']) && !empty($_GET['search'])) {
+        $condiciones[] = "CONCAT(u.Nombre, ' ', u.ApellidoPaterno, ' ', u.ApellidoMaterno) LIKE :search";
+        $params[':search'] = "%{$_GET['search']}%";
+    }
+
+    if (count($condiciones) > 0) {
+        $where = " WHERE " . implode(" AND ", $condiciones);
+        $query .= $where;
+        $countQuery .= $where;
+    }
+
+    // Contar total de registros
+    $stmtCount = $conn->prepare($countQuery);
+    foreach ($params as $key => $value) {
+        $stmtCount->bindValue($key, $value);
+    }
+    $stmtCount->execute();
+    $totalRegistros = $stmtCount->fetchColumn();
+    $totalPaginas = ceil($totalRegistros / $registrosPorPagina);
+
+    // Consulta principal con LIMIT y OFFSET
+    $query .= " LIMIT :limit OFFSET :offset";
+    $stmt = $conn->prepare($query);
+
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->bindValue(':limit', $registrosPorPagina, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+
+    $stmt->execute();
+    $asignaciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Mostrar resultados
+    foreach ($asignaciones as $asignacion) {
+        echo "<tr>";
+        echo "<td>{$asignacion['ID_Asignacion']}</td>";
+        echo "<td>{$asignacion['NombreCompleto']}</td>";
+        echo "<td>{$asignacion['NombreProyecto']}</td>";
+        echo "</tr>";
+    }
+
+    // --- Paginación ---
+    $ventana = 10;
+    $inicio = max(1, $pagina - floor($ventana / 2));
+    $fin = min($totalPaginas, $inicio + $ventana - 1);
+    if ($fin - $inicio + 1 < $ventana) {
+        $inicio = max(1, $fin - $ventana + 1);
+    }
+
+    echo "<nav aria-label='Page navigation'>";
+    echo "<ul class='pagination justify-content-center mt-3'>";
+
+    // Botón Anterior
+    if ($pagina > 1) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina - 1) . "'>&larr; Anterior</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>&larr; Anterior</span></li>";
+    }
+
+    // Números de página
+    for ($i = $inicio; $i <= $fin; $i++) {
+        if ($i == $pagina) {
+            echo "<li class='page-item active'><span class='page-link'>$i</span></li>";
+        } else {
+            echo "<li class='page-item'><a class='page-link' href='?pagina=$i'>$i</a></li>";
+        }
+    }
+
+    // Botón Siguiente
+    if ($pagina < $totalPaginas) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina + 1) . "'>Siguiente &rarr;</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>Siguiente &rarr;</span></li>";
+    }
+
+    echo "</ul>";
+    echo "</nav>";
+
+    $conn = null;
+
+} catch(PDOException $e) {
+    echo "Error: " . $e->getMessage();
+}
+?>
+
         </tbody>
     </table>
 </div>

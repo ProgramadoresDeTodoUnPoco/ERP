@@ -385,9 +385,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['logout'])) {
             <?php
 require_once __DIR__ . '/../db/config.php';
 try {
-    $conn = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
+    $conn = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
+   $conn->exec("SET NAMES utf8");
     $query = "SELECT TV.Nombre_tipo AS Tipo_Violencia, COUNT(*) AS total
               FROM Usuarios_Tipos_Violencia AS UTV
               INNER JOIN Tipos_Violencia AS TV 
@@ -474,9 +474,9 @@ try {
 require_once __DIR__ . '/../db/config.php';
 
 try {
-    $conn = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
-    // set the PDO error mode to exception
+    $conn = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+   $conn->exec("SET NAMES utf8");
 
     // Consulta para obtener los datos
     $query5 = "SELECT Municipio, COUNT(*) AS total FROM Feminicidios GROUP BY Municipio";
@@ -520,9 +520,9 @@ try {
         require_once __DIR__ . '/../db/config.php';
 
         try {
-            $conn = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
-            // set the PDO error mode to exception
-            $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $conn = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
+    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+   $conn->exec("SET NAMES utf8");
 
             // Consulta para obtener los datos
             $query1 = "SELECT TV.Nombre_tipo AS Tipo_Violencia, COUNT(*) AS total FROM Usuarios_Tipos_Violencia AS UTV
@@ -612,9 +612,9 @@ require_once __DIR__ . '/../db/config.php';
         require_once __DIR__ . '/../db/config.php';
 
         try {
-            $conn = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
-            // set the PDO error mode to exception
-            $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+           $conn = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
+    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+   $conn->exec("SET NAMES utf8");
 
             // Consulta para obtener los datos
             $query5 = "SELECT Municipio, COUNT(*) AS total FROM Feminicidios GROUP BY Municipio";
@@ -660,9 +660,9 @@ require_once __DIR__ . '/../db/config.php';
         require_once __DIR__ . '/../db/config.php';
 
         try {
-            $conn = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
-            // set the PDO error mode to exception
-            $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $conn = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
+    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+   $conn->exec("SET NAMES utf8");
 
             // Consulta para obtener los datos
             $query7 = "SELECT DATE_FORMAT(FechaHecho, '%Y-%m') AS Mes, COUNT(*) AS total FROM Feminicidios GROUP BY Mes";
@@ -686,9 +686,9 @@ require_once __DIR__ . '/../db/config.php';
         require_once __DIR__ . '/../db/config.php';
 
         try {
-            $conn = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
-            // set the PDO error mode to exception
-            $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $conn = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
+    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+   $conn->exec("SET NAMES utf8");
 
             // Consulta para obtener los datos
             $query8 = "SELECT YEAR(FechaHecho) AS Anio, COUNT(*) AS total FROM Feminicidios GROUP BY Anio";
@@ -712,9 +712,9 @@ require_once __DIR__ . '/../db/config.php';
         require_once __DIR__ . '/../db/config.php';
 
         try {
-            $conn = new PDO("mysql:host=$host;dbname=$dbname", $username, $password);
-            // set the PDO error mode to exception
-            $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $conn = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
+    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+   $conn->exec("SET NAMES utf8");
 
             // Consulta para obtener los datos
             $query9 = "SELECT TipoArma, COUNT(*) AS total FROM Feminicidios GROUP BY TipoArma";

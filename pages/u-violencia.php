@@ -349,45 +349,118 @@ require_once __DIR__ . '/../pages/footer.php';
             </tr>
         </thead>
         <tbody>
-            <?php
-            require_once __DIR__ . '/../db/config.php';
+          <?php
+require_once __DIR__ . '/../db/config.php';
 
-            try {
-                // Inicializar la consulta SQL
-                $query = "SELECT u.id AS usuario_id, u.Nombre AS usuario_nombre, u.ApellidoPaterno AS usuario_apellido_paterno, u.ApellidoMaterno AS usuario_apellido_materno, tv.Nombre_tipo AS tipo_violencia_nombre
-                          FROM Usuario u
-                          INNER JOIN Usuarios_Tipos_Violencia utv ON u.id = utv.ID_Usuario
-                          INNER JOIN Tipos_Violencia tv ON utv.ID_Tipo_Violencia = tv.ID_Tipo_Violencia";
+try {
+    $registrosPorPagina = 25;
+    $pagina = isset($_GET['pagina']) && is_numeric($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
+    $offset = ($pagina - 1) * $registrosPorPagina;
 
-                // Verificar si se envió una consulta de búsqueda
-                if (isset($_GET['search']) && !empty($_GET['search'])) {
-                    $search = $_GET['search'];
-                    $query .= " WHERE CONCAT(u.Nombre, ' ', u.ApellidoPaterno, ' ', u.ApellidoMaterno) LIKE '%$search%'";
-                }
+    // Consulta base
+    $query = "SELECT u.id AS usuario_id, u.Nombre AS usuario_nombre, u.ApellidoPaterno AS usuario_apellido_paterno, u.ApellidoMaterno AS usuario_apellido_materno, tv.Nombre_tipo AS tipo_violencia_nombre
+              FROM Usuario u
+              INNER JOIN Usuarios_Tipos_Violencia utv ON u.id = utv.ID_Usuario
+              INNER JOIN Tipos_Violencia tv ON utv.ID_Tipo_Violencia = tv.ID_Tipo_Violencia";
 
-                // Preparar y ejecutar la consulta SQL
-                $stmt = $conn->prepare($query);
-                $stmt->execute();
+    $countQuery = "SELECT COUNT(*) 
+                   FROM Usuario u
+                   INNER JOIN Usuarios_Tipos_Violencia utv ON u.id = utv.ID_Usuario
+                   INNER JOIN Tipos_Violencia tv ON utv.ID_Tipo_Violencia = tv.ID_Tipo_Violencia";
 
-                // Obtener los resultados de la consulta
-                $usuarios_tipos_violencia = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $condiciones = [];
+    $params = [];
 
-                // Mostrar los usuarios y sus tipos de violencia en la tabla
-                foreach ($usuarios_tipos_violencia as $utv) {
-                    echo "<tr>";
-                    echo "<td>{$utv['usuario_id']}</td>";
-                    echo "<td>{$utv['usuario_nombre']} {$utv['usuario_apellido_paterno']} {$utv['usuario_apellido_materno']}</td>";
-                    echo "<td>{$utv['tipo_violencia_nombre']}</td>";
-                    echo "<td>";
-                    // Botón para eliminar
-                    echo "<a><button class='btn btn-danger btn-sm eliminar-usuario' data-id='{$utv['usuario_id']}'>Eliminar</button></a>";
-                    echo "</td>";
-                    echo "</tr>";
-                }
-            } catch(PDOException $e) {
-                echo "Error: " . $e->getMessage();
-            }
-            ?>
+    // Búsqueda por nombre
+    if (isset($_GET['search']) && !empty($_GET['search'])) {
+        $condiciones[] = "CONCAT(u.Nombre, ' ', u.ApellidoPaterno, ' ', u.ApellidoMaterno) LIKE :search";
+        $params[':search'] = "%{$_GET['search']}%";
+    }
+
+    // Aplicar condiciones si existen
+    if (count($condiciones) > 0) {
+        $where = " WHERE " . implode(" AND ", $condiciones);
+        $query .= $where;
+        $countQuery .= $where;
+    }
+
+    // Contar total de registros
+    $stmtCount = $conn->prepare($countQuery);
+    foreach ($params as $key => $value) {
+        $stmtCount->bindValue($key, $value);
+    }
+    $stmtCount->execute();
+    $totalRegistros = $stmtCount->fetchColumn();
+    $totalPaginas = ceil($totalRegistros / $registrosPorPagina);
+
+    // Consulta principal con LIMIT y OFFSET
+    $query .= " LIMIT :limit OFFSET :offset";
+    $stmt = $conn->prepare($query);
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->bindValue(':limit', $registrosPorPagina, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $usuarios_tipos_violencia = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Mostrar resultados
+    foreach ($usuarios_tipos_violencia as $utv) {
+        echo "<tr>";
+        echo "<td>{$utv['usuario_id']}</td>";
+        echo "<td>{$utv['usuario_nombre']} {$utv['usuario_apellido_paterno']} {$utv['usuario_apellido_materno']}</td>";
+        echo "<td>{$utv['tipo_violencia_nombre']}</td>";
+        echo "<td>";
+        echo "<button class='btn btn-danger btn-sm eliminar-usuario' data-id='{$utv['usuario_id']}'>Eliminar</button>";
+        echo "</td>";
+        echo "</tr>";
+    }
+
+    // --- Paginación ---
+    $ventana = 10;
+    $inicio = max(1, $pagina - floor($ventana / 2));
+    $fin = min($totalPaginas, $inicio + $ventana - 1);
+    if ($fin - $inicio + 1 < $ventana) {
+        $inicio = max(1, $fin - $ventana + 1);
+    }
+
+    echo "<nav aria-label='Page navigation'>";
+    echo "<ul class='pagination justify-content-center mt-3'>";
+
+    // Botón Anterior
+    if ($pagina > 1) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina - 1) . "'>&larr; Anterior</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>&larr; Anterior</span></li>";
+    }
+
+    // Números de página
+    for ($i = $inicio; $i <= $fin; $i++) {
+        if ($i == $pagina) {
+            echo "<li class='page-item active'><span class='page-link'>$i</span></li>";
+        } else {
+            echo "<li class='page-item'><a class='page-link' href='?pagina=$i'>$i</a></li>";
+        }
+    }
+
+    // Botón Siguiente
+    if ($pagina < $totalPaginas) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina + 1) . "'>Siguiente &rarr;</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>Siguiente &rarr;</span></li>";
+    }
+
+    echo "</ul>";
+    echo "</nav>";
+
+    $conn = null;
+
+} catch(PDOException $e) {
+    echo "Error: " . $e->getMessage();
+}
+?>
+
         </tbody>
     </table>
 </div>

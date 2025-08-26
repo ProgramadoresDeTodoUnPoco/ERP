@@ -336,49 +336,125 @@ require_once __DIR__ . '/../pages/footer.php';
             </tr>
         </thead>
         <tbody>
-            <?php
-            require_once __DIR__ . '/../db/config.php';
+          <?php
+require_once __DIR__ . '/../db/config.php';
 
-            try {
-                // Inicializar la consulta SQL con JOIN
-                $query = "SELECT p.ID_Proyecto, CONCAT(pe.Nombre, ' ', pe.ApellidoPaterno, ' ', pe.ApellidoMaterno) AS NombrePersonal, p.NombreProyecto, p.MontoFinanciamiento, p.FechaInicio, p.FechaTermino, p.Dependencia, p.DescripcionProyecto, p.Administrador FROM Proyectos p INNER JOIN Personal pe ON p.ID_Personal = pe.ID_Personal";
+try {
+    $registrosPorPagina = 10;
+    $pagina = isset($_GET['pagina']) && is_numeric($_GET['pagina']) ? (int)$_GET['pagina'] : 1;
+    $offset = ($pagina - 1) * $registrosPorPagina;
 
-                // Preparar y ejecutar la consulta SQL
-                $stmt = $conn->prepare($query);
-                $stmt->execute();
+    $query = "SELECT p.ID_Proyecto, CONCAT(pe.Nombre, ' ', pe.ApellidoPaterno, ' ', pe.ApellidoMaterno) AS NombrePersonal, 
+                     p.NombreProyecto, p.MontoFinanciamiento, p.FechaInicio, p.FechaTermino, p.Dependencia, 
+                     p.DescripcionProyecto, p.Administrador
+              FROM Proyectos p
+              INNER JOIN Personal pe ON p.ID_Personal = pe.ID_Personal";
 
-                // Obtener los resultados de la consulta
-                $proyectos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $countQuery = "SELECT COUNT(*) FROM Proyectos p INNER JOIN Personal pe ON p.ID_Personal = pe.ID_Personal";
 
-                // Mostrar los datos en la tabla HTML
-                foreach ($proyectos as $proyecto) {
-                    echo "<tr>";
-                    echo "<td>{$proyecto['ID_Proyecto']}</td>";
-                    echo "<td>{$proyecto['NombrePersonal']}</td>";
-                    echo "<td>{$proyecto['NombreProyecto']}</td>";
-                    echo "<td>{$proyecto['MontoFinanciamiento']}</td>";
-                    echo "<td>{$proyecto['FechaInicio']}</td>";
-                    echo "<td>{$proyecto['FechaTermino']}</td>";
-                    echo "<td>{$proyecto['Dependencia']}</td>";
-                    echo "<td>{$proyecto['DescripcionProyecto']}</td>";
-                    echo "<td>{$proyecto['Administrador']}</td>";
-                    // Calcular días restantes
-                    $fechaTermino = new DateTime($proyecto['FechaTermino']);
-                    $hoy = new DateTime();
-                    $diasRestantes = $hoy->diff($fechaTermino)->days;
-                    echo "<td>{$diasRestantes}</td>";
-                    echo "<td>";
-                    // Botón para editar
-                    //echo "<a href='editar_proyecto.php?id={$proyecto['ID_Proyecto']}' class='btn btn-primary btn-sm'>Editar</a>";
-                    // Botón para eliminar
-                    //echo "<button class='btn btn-danger btn-sm eliminar-proyecto' data-id='{$proyecto['ID_Proyecto']}'>Eliminar</button>";
-                    echo "</td>";
-                    echo "</tr>";
-                }
-            } catch(PDOException $e) {
-                echo "Error: " . $e->getMessage();
-            }
-            ?>
+    $condiciones = [];
+    $params = [];
+
+    // Búsqueda
+    if (isset($_GET['search']) && !empty($_GET['search'])) {
+        $condiciones[] = "(p.NombreProyecto LIKE :search OR CONCAT(pe.Nombre, ' ', pe.ApellidoPaterno, ' ', pe.ApellidoMaterno) LIKE :search)";
+        $params[':search'] = "%{$_GET['search']}%";
+    }
+
+    if (count($condiciones) > 0) {
+        $where = " WHERE " . implode(" AND ", $condiciones);
+        $query .= $where;
+        $countQuery .= $where;
+    }
+
+    // Contar total de registros
+    $stmtCount = $conn->prepare($countQuery);
+    foreach ($params as $key => $value) {
+        $stmtCount->bindValue($key, $value);
+    }
+    $stmtCount->execute();
+    $totalRegistros = $stmtCount->fetchColumn();
+    $totalPaginas = ceil($totalRegistros / $registrosPorPagina);
+
+    // Consulta principal con LIMIT y OFFSET
+    $query .= " LIMIT :limit OFFSET :offset";
+    $stmt = $conn->prepare($query);
+
+    foreach ($params as $key => $value) {
+        $stmt->bindValue($key, $value);
+    }
+    $stmt->bindValue(':limit', $registrosPorPagina, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+
+    $stmt->execute();
+    $proyectos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // Mostrar resultados
+    foreach ($proyectos as $proyecto) {
+        echo "<tr>";
+        echo "<td>{$proyecto['ID_Proyecto']}</td>";
+        echo "<td>{$proyecto['NombrePersonal']}</td>";
+        echo "<td>{$proyecto['NombreProyecto']}</td>";
+        echo "<td>{$proyecto['MontoFinanciamiento']}</td>";
+        echo "<td>{$proyecto['FechaInicio']}</td>";
+        echo "<td>{$proyecto['FechaTermino']}</td>";
+        echo "<td>{$proyecto['Dependencia']}</td>";
+        echo "<td>{$proyecto['DescripcionProyecto']}</td>";
+        echo "<td>{$proyecto['Administrador']}</td>";
+
+        // Calcular días restantes
+        $fechaTermino = new DateTime($proyecto['FechaTermino']);
+        $hoy = new DateTime();
+        $diasRestantes = $hoy > $fechaTermino ? 0 : $hoy->diff($fechaTermino)->days;
+        echo "<td>{$diasRestantes}</td>";
+
+        echo "<td>";
+        // Puedes habilitar botones de acción aquí
+        echo "</td>";
+        echo "</tr>";
+    }
+
+    // --- Paginación ---
+    $ventana = 10;
+    $inicio = max(1, $pagina - floor($ventana / 2));
+    $fin = min($totalPaginas, $inicio + $ventana - 1);
+    if ($fin - $inicio + 1 < $ventana) {
+        $inicio = max(1, $fin - $ventana + 1);
+    }
+
+    echo "<nav aria-label='Page navigation'>";
+    echo "<ul class='pagination justify-content-center mt-3'>";
+
+    if ($pagina > 1) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina - 1) . "'>&larr; Anterior</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>&larr; Anterior</span></li>";
+    }
+
+    for ($i = $inicio; $i <= $fin; $i++) {
+        if ($i == $pagina) {
+            echo "<li class='page-item active'><span class='page-link'>$i</span></li>";
+        } else {
+            echo "<li class='page-item'><a class='page-link' href='?pagina=$i'>$i</a></li>";
+        }
+    }
+
+    if ($pagina < $totalPaginas) {
+        echo "<li class='page-item'><a class='page-link' href='?pagina=" . ($pagina + 1) . "'>Siguiente &rarr;</a></li>";
+    } else {
+        echo "<li class='page-item disabled'><span class='page-link'>Siguiente &rarr;</span></li>";
+    }
+
+    echo "</ul>";
+    echo "</nav>";
+
+    $conn = null;
+
+} catch(PDOException $e) {
+    echo "Error: " . $e->getMessage();
+}
+?>
+
         </tbody>
     </table>
 </div>
